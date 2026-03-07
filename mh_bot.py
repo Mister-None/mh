@@ -1,205 +1,103 @@
-import requests,  json, os,  sqlite3, re, dotenv
+import requests, json, os, sqlite3, re, subprocess, sys
 from moviepy import AudioFileClip
-"ffmpeg -i input.opus -map_metadata -1 -c:a copy output.opus"
-data = {
-    'api_token': '',
-    'return': '',}
+from dotenv import load_dotenv
+from colorama import Fore, init
 
-f1 = 'Music'
-#files = {'file': open('sample.mp3', 'rb')}
-#raw_result = requests.post('https://api.audd.io/', data=data, files=files).json()
-#print(raw_result)
-#exit()
-con = sqlite3.connect('ms_data/ms.db')
+load_dotenv()
+init(autoreset=True)
+
+MS_DATA = os.getenv('ms_data')
+MS_FOLDER = os.getenv('ms_folder')
+
+con = sqlite3.connect(MS_DATA)
 cur = con.cursor()
-counter = 0
-for i in os.listdir(f1):
-    f2 = os.path.join(f1, i)
-    for j  in os.listdir(f2):
-        f3 = os.path.join(f2, j)
-        if os.path.isdir(f3):
-            for k in os.listdir(f3):
-                f4 = os.path.join(f3, k)
-                if f4.endswith('.opus'):
+
+if len(sys.argv) < 2:
+    lst_functions = ['', 'add to base', 'clean metadata']
+    print(Fore.RED + 'Enter number of function!')
+    [print(Fore.LIGHTYELLOW_EX + str(id), Fore.LIGHTGREEN_EX + '==>', Fore.LIGHTBLUE_EX +i) for id, i in enumerate(lst_functions) if i]
+    sys.exit(1)
+
+entry = int(sys.argv[1])
 
 
-                    track = AudioFileClip(f4)
-                    duration = track.duration
-                    if counter == 30:
-                        con.commit()
-                        cur.close()
-                        con.close()
-                        exit()
-                    if 1200 > duration > 0:
-                        #os.system(f"ffmpeg -i {f4} -c:a libopus -b:a 128k {f3}/output.opus")
-                        #os.system(f"rm {f4}")
-                        #f4 = f3 + '/output.opus'
-                        counter += 1
-                        sample = track.subclipped(1, duration//2).write_audiofile("sample.mp3")
-                        files = {'file': open('sample.mp3', 'rb')}
-                        try:
-                            raw_result = requests.post('https://api.audd.io/', data=data, files=files).json()
-                        except requests.exceptions.JSONDecodeError:
-                            con.commit()
-                            cur.close()
-                            con.close()
-                            exit()
+if entry == 1:
+    counter = 0
+    for i in os.listdir():
+        if i.endswith('.mp30') or  i.endswith('.m4a') or i.endswith('.opus'):
+            track = AudioFileClip(i)
+            duration = track.duration
+            if counter == 30:
+                print(Fore.LIGHTGREEN_EX + 'done')
+                con.commit()
+                cur.close()
+                con.close()
+                exit()
 
-                        reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir('ms_data') if re.search(r'\d+',  n)]
-                        if raw_result['status'] == "success" and raw_result['result']:
-                            result = raw_result['result']
-                            entry = 'y'
-                            if entry == 'n':
-                                con.commit()
-                                cur.close()
-                                con.close()
-                                exit()
-                            elif entry == 'y':
-                                try:
-                                    os.rename(f"{f4}", 'ms_data/' + str(max(reserved_names) + 1) + '.opus')
-                                except FileNotFoundError:
-                                    con.commit()
-                                    cur.close()
-                                    con.close()
-                                    exit()
+            if 1200 > duration > 0:
+                counter += 1
+                sample = track.subclipped(1, duration//3).write_audiofile("sample.mp3", logger=None)
+                
+                try:
+                    raw_data = subprocess.run(['songrec', 'recognize', 'sample.mp3', '--json'], capture_output=True, text=True)
+                    fine_data = json.loads(raw_data.stdout)
 
+                except requests.exceptions.JSONDecodeError as e:
+                    print(Fore.LIGHTRED_EX + str(e))
+                    con.commit()
+                    cur.close()
+                    con.close()
+                    exit()
 
-                                path = '/home/m/ms_data/' + str(max(reserved_names) + 1) + '.opus'
-                                cur.execute(f"""INSERT INTO items (
-                                            id, 
-                                            artist, 
-                                            title, 
-                                            album, 
-                                            release_date, 
-                                            label, 
-                                            path,
-                                            tag)
+                reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
+                
+                genre = fine_data['track']['genres']['primary'].replace("'", '_')
+                try: album = fine_data['track']['sections'][0]['metadata'][0]['text'].replace("'", '_')
+                except IndexError: album = 'unkown'
+                try: label = fine_data['track']['sections'][0]['metadata'][1]['text'].replace("'", '_')
+                
+                except IndexError: label = 'unkown'
+                try: date = fine_data['track']['sections'][0]['metadata'][2]['text'].replace("'", '_')
+                except IndexError: date = 'unkown'
 
-                                        VALUES (
-                                            {max(reserved_names) + 1}, 
-                                            ?, 
-                                            ?, 
-                                            ?, 
-                                            ?, 
-                                            ?, 
-                                            '{path}', 
-                                            '{j}')
-                                            """, 
-                                            [
-                                                result.get('artist', 'unkown'),
-                                                result.get('title', 'unkown'),
-                                                result.get('album', 'unkown'),
-                                                result.get('release_date', 'unkown'),
-                                                result.get('label', 'unknown')
-                                            ])
+                title = fine_data['track']['title'].replace("'", '_') 
+                artist = fine_data['track']['subtitle'].replace("'", '_')
+                
+                subprocess.run(['ffmpeg', '-loglevel', 'quiet', '-i', i, '-map_metadata', '-1', '-c:a', 'copy', 'output.opus'])
+                
+                os.rename('output.opus', MS_FOLDER + str(max(reserved_names) + 1) + '.opus')
+                path = MS_FOLDER + str(max(reserved_names) + 1) + '.opus'
 
-                        elif raw_result['status'] == "success": 
-                            os.rename(f"{f4}", 'ms_data/' + str(max(reserved_names) + 1) + '.opus')
-                            path = '/home/m/ms_data/' + str(max(reserved_names) + 1) + '.opus'
-                            cur.execute(f"""INSERT INTO items (
-                                        id, 
-                                        artist, 
-                                        title, 
-                                        album, 
-                                        release_date, 
-                                        label, 
-                                        path,
-                                        tag)
+                cur.execute(f"""INSERT INTO items (
+                                    id, 
+                                    artist, 
+                                    title, 
+                                    album, 
+                                    date, 
+                                    label, 
+                                    path,
+                                    genre)                     
 
-                                    VALUES (
-                                        {max(reserved_names) + 1}, 
-                                        'unkown', 
-                                        'unkown', 
-                                        'unkown', 
-                                        'unkown', 
-                                        'unkown', 
-                                        '{path}', 
-                                        '{j}')""")
-                        else:
-                            print(raw_result)
-                            con.commit()
-                            cur.close()
-                            con.close()
-                            exit()
-        else: pass
-#            f4 = f3
-#            if f4.endswith('.opus'):
-#                track = AudioFileClip(f4)
-#                duration = track.duration
-#                if 600 > duration > 0:
-#                    sample = track.subclipped(1, duration//2).write_audiofile("sample.mp3")
-#                    files = {'file': open('sample.mp3', 'rb')}
-#                    raw_result = requests.post('https://api.audd.io/', data=data, files=files).json()
-#                    reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir('ms_data') if re.search(r'\d+',  n)]
-#                    if raw_result['status'] == "success" and raw_result['result']:
-#                        result = raw_result['result']
-#                        entry = 'y'
-#                        if entry == 'n':
-#                            con.commit()
-#                            cur.close()
-#                            con.close()
-#                            exit()
-#                        elif entry == 'y':
-#                            os.rename(f4, 'ms_data/' + str(max(reserved_names) + 1) + '.opus')
-#                            path = '/home/m/ms_data/' + str(max(reserved_names) + 1) + '.opus'
-#                            cur.execute(f"""INSERT INTO items (
-#                                        id, 
-#                                        artist, 
-#                                        title, 
-#                                        album, 
-#                                        release_date, 
-#                                        label, 
-#                                        path,
-#                                        tag)
-#
-#                                    VALUES (
-#                                        {max(reserved_names) + 1}, 
-#                                        ?, 
-#                                        ?, 
-#                                        ?, 
-#                                        ?, 
-#                                        ?, 
-#                                        '{path}', 
-#                                        '{i}')
-#                                        """, 
-#                                        [
-#                                            result.get('artist', 'unkown'),
-#                                            result.get('title', 'unkown'),
-#                                            result.get('album', 'unkown'),
-#                                            result.get('release_date', 'unkown'),
-#                                            result.get('label', 'unknown')
-#                                        ])
-#
-#                    else: 
-#                        os.rename(f4, 'ms_data/' + str(max(reserved_names) + 1) + '.opus')
-#                        path = '/home/m/ms_data/' + str(max(reserved_names) + 1) + '.opus'
-#                        cur.execute(f"""INSERT INTO items (
-#                                    id, 
-#                                    artist, 
-#                                    title, 
-#                                    album, 
-#                                    release_date, 
-#                                    label, 
-#                                    path,
-#                                    tag)
-#
-#                                VALUES (
-#                                    {max(reserved_names) + 1}, 
-#                                    'unkown', 
-#                                    'unkown', 
-#                                    'unkown', 
-#                                    'unkown', 
-#                                    'unkown', 
-#                                    '{path}', 
-#                                    '{i}')""")
-
-                    #
-
-#
-#for j in info:
-#    print(j)
-#sqlite3 ms_data/ms.db "insert into items (id, artist, title, album, release_date, label, path, tag) values (2, 'Агата Кристи', 'Опиум для никого', 'Избранное', '2008-01-01', 'Первое музыкальное Издательство', '/home/m/ms_data/2.opus', 'rus_rock')" 
-
+                                VALUES (
+                                   {max(reserved_names) + 1}, 
+                                   '{artist}',
+                                   '{title}', 
+                                   '{album}', 
+                                   '{date}', 
+                                   '{label}', 
+                                   '{path}', 
+                                   '{genre}')
+                           """)
+                
+                subprocess.run(['sudo', 'rm', i])
+         
+elif entry == 2: 
+    print("No need!!!")
+    exit()
+    for i in os.listdir(MS_FOLDER):
+        subprocess.run(['ffmpeg', '-loglevel', 'quiet', '-i', MS_FOLDER+i, '-map_metadata', '-1', '-c:a', 'copy', MS_FOLDER + 'cleaned' + i])
+        subprocess.run(['rm', MS_FOLDER+i])
+       
 con.commit()
 cur.close()
 con.close()

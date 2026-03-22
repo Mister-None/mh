@@ -13,6 +13,7 @@ MS_FOLDER = os.getenv('ms_folder')
 
 con = sqlite3.connect(MS_DATA)
 cur = con.cursor()
+
 def sub(raw):
     raw = re.sub(r"""[,.()"'|!?/«»_:;”=’`~\n“]""", ' ', raw)
     raw = re.sub(r'[\[\]]', ' ', raw)
@@ -176,69 +177,78 @@ elif entry == 5:
                 subprocess.run(['rm', file])
 
 elif entry == 6:
-    entry1 = input('path >>> ').strip()
-    track = AudioFileClip(entry1)
-    duration = track.duration
-    sample = track.subclipped(1, duration//3).write_audiofile("sample.mp3", logger=None)
-    try:
-        raw_data = subprocess.run(['songrec', 'recognize', 'sample.mp3', '--json'], capture_output=True, text=True)
+    if len(sys.argv) > 2:
+        if sys.argv[2] == 'g':
+            genres = input('genre >>> ').split(' ')
+            entries = []
+            for i in genres:
+                entries.extend([j[0] for j in cur.execute(f"SELECT path FROM items WHERE genre='{i}'")])
+    else:
+        entries = input('path >>> ').strip().split(' ')
+
+    for entry1 in tqdm(entries):
+        track = AudioFileClip(entry1)
+        duration = track.duration
+        sample = track.subclipped(1, duration//3).write_audiofile("sample.mp3", logger=None)
         try:
-            fine_data = json.loads(raw_data.stdout)
-        except json.decoder.JSONDecodeError as e: 
-            print(e)
+            raw_data = subprocess.run(['songrec', 'recognize', 'sample.mp3', '--json'], capture_output=True, text=True)
+            try:
+                fine_data = json.loads(raw_data.stdout)
+            except json.decoder.JSONDecodeError as e: 
+                print(e)
+                exit()
+                #continue
+            time.sleep(10)
+        except requests.exceptions.JSONDecodeError as e:
+            print(Fore.LIGHTRED_EX + str(e))
+            con.commit()
+            cur.close()
+            con.close()
             exit()
-            #continue
-        time.sleep(10)
-    except requests.exceptions.JSONDecodeError as e:
-        print(Fore.LIGHTRED_EX + str(e))
-        con.commit()
-        cur.close()
-        con.close()
-        exit()
-    try:
-        genre = fine_data['track']['genres']['primary']
-        genre = sub(genre)
-    except KeyError: genre ='unkown'
+        try:
+            genre = fine_data['track']['genres']['primary']
+            genre = sub(genre)
+        except KeyError: genre ='unkown'
 
-    try: album = fine_data['track']['sections'][0]['metadata'][0]['text'].replace("'", '_')
-    except IndexError: album = 'unkown'
-    
-    try: label = fine_data['track']['sections'][0]['metadata'][1]['text'].replace("'", '_')
-    except IndexError: label = 'unkown'
-    
-    try: date = fine_data['track']['sections'][0]['metadata'][2]['text'].replace("'", '_')
-    except IndexError: date = 'unkown'
-
-    title = fine_data['track']['title']
-    title = sub(title)
-    artist = fine_data['track']['subtitle']
-    artist = sub(artist)
-    
-    music_data = [i[0] for i in cur.execute("select concat(artist, ' ', title) from items where artist !='unkown' and title !='unkown'")]
-
-    if str(artist + ' ' +  title) not in music_data:
+        try: album = fine_data['track']['sections'][0]['metadata'][0]['text'].replace("'", '_')
+        except IndexError: album = 'unkown'
         
-        cur.execute(f"""UPDATE items SET 
-                            artist=?, 
-                            title=?, 
-                            album=?, 
-                            date=?, 
-                            label=?, 
-                            genre=?
-                        WHERE path=?""",
-                        [
-                            artist,
-                            title, 
-                            album, 
-                            date, 
-                            label, 
-                            genre,
-                            entry1
-                        ]
-                    )
-    else: 
-        print(Fore.LIGHTGREEN_EX + str(artist + ' ' +  title), 'in database!!!')
-    subprocess.run(['rm', 'sample.mp3'])
+        try: label = fine_data['track']['sections'][0]['metadata'][1]['text'].replace("'", '_')
+        except IndexError: label = 'unkown'
+        
+        try: date = fine_data['track']['sections'][0]['metadata'][2]['text'].replace("'", '_')
+        except IndexError: date = 'unkown'
+
+        title = fine_data['track']['title']
+        title = sub(title)
+        artist = fine_data['track']['subtitle']
+        artist = sub(artist)
+        
+        music_data = [i[0] for i in cur.execute("select concat(artist, ' ', title) from items where artist !='unkown' and title !='unkown'")]
+
+        if str(artist + ' ' +  title) not in music_data:
+            
+            cur.execute(f"""UPDATE items SET 
+                                artist=?, 
+                                title=?, 
+                                album=?, 
+                                date=?, 
+                                label=?, 
+                                genre=?
+                            WHERE path=?""",
+                            [
+                                artist,
+                                title, 
+                                album, 
+                                date, 
+                                label, 
+                                genre,
+                                entry1
+                            ]
+                        )
+        else: 
+            print(Fore.LIGHTGREEN_EX + str(artist + ' ' +  title), 'in database!!!')
+        subprocess.run(['rm', 'sample.mp3'])
    
 con.commit()
 cur.close()

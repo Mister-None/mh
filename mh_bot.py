@@ -1,9 +1,8 @@
-import requests, json, os, sqlite3, re, subprocess, sys, glob
+import requests, json, os, sqlite3, re, subprocess, sys, glob, time, pandas as pd
 from moviepy import AudioFileClip
 from dotenv import load_dotenv
 from colorama import Fore, init
 from tqdm import tqdm
-import time
 
 load_dotenv()
 init(autoreset=True)
@@ -23,7 +22,7 @@ def sub(raw):
     return raw.lower().strip() 
 
 if len(sys.argv) < 2:
-    lst_functions = ['', 'add to base', 'clean metadata', 'play by arist', 'normalize', 'remove duplicactes', 'update base', 'remove from base']
+    lst_functions = ['', 'add to base', 'clean metadata', 'play by arist', 'normalize', 'remove duplicactes', 'update base', 'remove from base', 'create playlists', 'add specific base']
     print(Fore.RED + 'Enter number of function!')
     [print(Fore.LIGHTYELLOW_EX + str(id), Fore.LIGHTGREEN_EX + '==>', Fore.LIGHTBLUE_EX +i) for id, i in enumerate(lst_functions) if i]
     sys.exit(1)
@@ -41,7 +40,6 @@ elif entry == 1:
     for i in tqdm(glob.glob("*.opus")):
         track = AudioFileClip(i)
         duration = track.duration
-
         if counter == 100:
             print(Fore.LIGHTGREEN_EX + 'done')
             con.commit()
@@ -58,8 +56,37 @@ elif entry == 1:
                 try:
                     fine_data = json.loads(raw_data.stdout)
                 except json.decoder.JSONDecodeError as e:
+                    reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
+                    subprocess.run(['ffmpeg', '-loglevel', 'quiet', '-i', i, '-map_metadata', '-1', '-c:a', 'copy', 'output.opus'])
+                    os.rename('output.opus', MS_FOLDER + str(max(reserved_names) + 1) + '.opus')
+                    path = MS_FOLDER + str(max(reserved_names) + 1) + '.opus'
+                    print(i)
+                    artist = input('artist > ')
+                    title = input('title > ')
+                    genre = input('genre > ')
+                    cur.execute(f"""INSERT INTO items (
+                        id, 
+                        artist, 
+                        title, 
+                        album, 
+                        date, 
+                        label, 
+                        path,
+                        genre)                     
+
+                    VALUES (
+                       {max(reserved_names) + 1}, 
+                       '{artist}',
+                       '{title}', 
+                       'unkown', 
+                       'unkown', 
+                       'unkown', 
+                       '{path}', 
+                       '{genre}')
+               """)
+                    subprocess.run(['sudo', 'rm', i])
+                    subprocess.run(['rm', 'sample.mp3'])
                     continue
-                time.sleep(10)
 
             except requests.exceptions.JSONDecodeError as e:
                 print(Fore.LIGHTRED_EX + str(e))
@@ -68,8 +95,8 @@ elif entry == 1:
                 con.close()
                 exit()
 
+            time.sleep(5)
             reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
-            
             try:
                 genre = fine_data['track']['genres']['primary']
                 genre = sub(genre)
@@ -141,20 +168,23 @@ elif entry == 3:
         selector = 'genre'
     elif sys.argv[2] == 'y':
         selector = 'date'
-    
-    data = [i[0] for i in cur.execute(f'SELECT distinct {selector} from items order by 1 DESC')]
-    print(*data,  sep='\n')
 
-    entry = input('>>> ').split(' ')
-    if len(entry) == 1:
-        entry = f"('{entry[0]}')"
-    else:
-        for id, i in enumerate(entry):
-            entry[id] = f'{i}'
-        entry = tuple(entry)
+    data = [i[0] for i in cur.execute(f'SELECT distinct {selector} from items order by 1 DESC')]    
+    while True: 
+        print(*data,  sep='\n')
 
-    playlist = [i[0] for i in cur.execute(f"SELECT path from items where {selector} in {entry} order by random()")]
-    subprocess.run(['mpv'] + playlist)
+        entry = input('>>> ').split(' ')
+        if len(entry) == 0:
+            exit()
+        elif len(entry) == 1:
+            entry = f"('{entry[0]}')"
+        else:
+            for id, i in enumerate(entry):
+                entry[id] = f'{i}'
+            entry = tuple(entry)
+
+        playlist = [i[0] for i in cur.execute(f"SELECT path from items where {selector} in {entry} order by random()")]
+        subprocess.run(['mpv'] + playlist)
 
 elif entry == 4:
     raw_data = [i for i in cur.execute(f"SELECT artist, title from items")]
@@ -248,6 +278,23 @@ elif entry == 7:
     cur.execute(f"delete from items where id={item}")
     subprocess.run(['rm', path])
 
+elif entry == 8:
+    genres = [i[0] for i in cur.execute("SELECT DISTINCT genre FROM items")]
+    for i in genres:
+        playlist = [str(j[0]) for j in cur.execute(f"SELECT CONCAT(id,'.opus') FROM items WHERE genre='{i}' ORDER BY RANDOM()")]
+        with open(i+'.m3u8', 'w') as file:
+            file.write('\n'.join(playlist))
+elif entry == 9:
+    df = pd.read_excel('/home/m/Downloads/s4360dbc20.xlsx', sheet_name='s4360dbc20')
+    for id, track in enumerate(df['title']):
+        artist = sub(str(df['artist'][id]))
+        track = sub(str(track))
+        album = sub(str(df['artist'][id]))
+        unique_song = artist + ' - ' + track
+        try:
+            cur.execute("INSERT INTO coma_fm(unique_song, title, artist, album) VALUES(?, ?, ?, ?)", [unique_song, track, artist,  album])
+        except sqlite3.IntegrityError:
+            print(unique_song)
 con.commit()
 cur.close()
 con.close()

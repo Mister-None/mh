@@ -4,12 +4,12 @@ from dotenv import load_dotenv
 from colorama import Fore, init
 from tqdm import tqdm
 
-load_dotenv()
+load_dotenv(dotenv_path=os.getenv('DOTENV_FILE_PATH'))
 init(autoreset=True)
 
 MS_DATA = os.getenv('ms_data')
 MS_FOLDER = os.getenv('ms_folder')
-
+OTHER_BASE = os.getenv('other_base')
 con = sqlite3.connect(MS_DATA)
 cur = con.cursor()
 
@@ -22,7 +22,7 @@ def sub(raw):
     return raw.lower().strip() 
 
 if len(sys.argv) < 2:
-    lst_functions = ['', 'add to base', 'clean metadata', 'play by arist', 'normalize', 'remove duplicactes', 'update base', 'remove from base', 'create playlists', 'add specific base']
+    lst_functions = ['', 'add to base', 'clean metadata', 'play by arist/title/genre/year', 'normalize', 'remove duplicactes', 'update base', 'remove from base', 'create playlists', 'add specific base']
     print(Fore.RED + 'Enter number of function!')
     [print(Fore.LIGHTYELLOW_EX + str(id), Fore.LIGHTGREEN_EX + '==>', Fore.LIGHTBLUE_EX +i) for id, i in enumerate(lst_functions) if i]
     sys.exit(1)
@@ -285,7 +285,7 @@ elif entry == 8:
         with open(i+'.m3u8', 'w') as file:
             file.write('\n'.join(playlist))
 elif entry == 9:
-    df = pd.read_excel('/home/m/Downloads/s4360dbc20.xlsx', sheet_name='s4360dbc20')
+    df = pd.read_excel(OTHER_BASE, sheet_name='')
     for id, track in enumerate(df['title']):
         artist = sub(str(df['artist'][id]))
         track = sub(str(track))

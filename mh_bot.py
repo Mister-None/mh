@@ -37,115 +37,123 @@ if entry == 0:
 
 elif entry == 1:
     counter = 0
-    for i in tqdm(glob.glob("*.opus")):
-        track = AudioFileClip(i)
-        duration = track.duration
-        if counter == 100:
-            print(Fore.LIGHTGREEN_EX + 'done')
-            con.commit()
-            cur.close()
-            con.close()
-            exit()
-
-        if 1200 > duration > 0:
-            counter += 1
-            sample = track.subclipped(1, duration//3).write_audiofile("sample.mp3", logger=None)
-            
-            try:
-                raw_data = subprocess.run(['songrec', 'recognize', 'sample.mp3', '--json'], capture_output=True, text=True)
-                try:
-                    fine_data = json.loads(raw_data.stdout)
-                except json.decoder.JSONDecodeError as e:
-                    reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
-                    subprocess.run(['ffmpeg', '-loglevel', 'quiet', '-i', i, '-map_metadata', '-1', '-c:a', 'copy', 'output.opus'])
-                    os.rename('output.opus', MS_FOLDER + str(max(reserved_names) + 1) + '.opus')
-                    path = MS_FOLDER + str(max(reserved_names) + 1) + '.opus'
-                    print(i)
-                    artist = input('artist > ')
-                    title = input('title > ')
-                    genre = input('genre > ')
-                    cur.execute(f"""INSERT INTO items (
-                        id, 
-                        artist, 
-                        title, 
-                        album, 
-                        date, 
-                        label, 
-                        path,
-                        genre)                     
-
-                    VALUES (
-                       {max(reserved_names) + 1}, 
-                       '{artist}',
-                       '{title}', 
-                       'unkown', 
-                       'unkown', 
-                       'unkown', 
-                       '{path}', 
-                       '{genre}')
-               """)
-                    subprocess.run(['sudo', 'rm', i])
-                    subprocess.run(['rm', 'sample.mp3'])
-                    continue
-
-            except requests.exceptions.JSONDecodeError as e:
-                print(Fore.LIGHTRED_EX + str(e))
+    music_formats = ["*.opus","*.m4a"]
+    for mf in music_formats:
+        for i in tqdm(glob.glob(mf)):
+            track = AudioFileClip(i)
+            duration = track.duration
+            if counter == 100:
+                print(Fore.LIGHTGREEN_EX + 'done')
                 con.commit()
                 cur.close()
                 con.close()
                 exit()
-
-            time.sleep(5)
-            reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
-            try:
-                genre = fine_data['track']['genres']['primary']
-                genre = sub(genre)
-            except KeyError: genre ='unkown'
-            try: album = fine_data['track']['sections'][0]['metadata'][0]['text'].replace("'", '_')
-            except IndexError: album = 'unkown'
-            try: label = fine_data['track']['sections'][0]['metadata'][1]['text'].replace("'", '_')
-            
-            except IndexError: label = 'unkown'
-            try: date = fine_data['track']['sections'][0]['metadata'][2]['text'].replace("'", '_')
-            except IndexError: date = 'unkown'
-
-            title = fine_data['track']['title']
-            title = sub(title)
-            artist = fine_data['track']['subtitle']
-            artist = sub(artist)
-            
-            music_data = [i[0] for i in cur.execute("select concat(artist, ' ', title) from items where artist !='unkown' and title !='unkown'")]
-
-            if str(artist + ' ' +  title) not in music_data:
-                subprocess.run(['ffmpeg', '-loglevel', 'quiet', '-i', i, '-map_metadata', '-1', '-c:a', 'copy', 'output.opus'])
+            if 1200 > duration > 0:
+                counter += 1
+                sample = track.subclipped(1, duration//3).write_audiofile("sample.mp3", logger=None)
                 
-                os.rename('output.opus', MS_FOLDER + str(max(reserved_names) + 1) + '.opus')
-                path = MS_FOLDER + str(max(reserved_names) + 1) + '.opus'
-                
-                cur.execute(f"""INSERT INTO items (
-                                    id, 
-                                    artist, 
-                                    title, 
-                                    album, 
-                                    date, 
-                                    label, 
-                                    path,
-                                    genre)                     
+                try:
+                    raw_data = subprocess.run(['songrec', 'recognize', 'sample.mp3', '--json'], capture_output=True, text=True)
+                    try:
+                        fine_data = json.loads(raw_data.stdout)
+                    except json.decoder.JSONDecodeError as e:
+                        reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
+                        if i.endswith('.opus'):
+                            subprocess.run(['ffmpeg', '-loglevel', 'error',  '-i', i, '-map_metadata', '-1', '-c:a', 'copy', 'output.opus'])
+                        else:
+                            subprocess.run(['ffmpeg', '-loglevel', 'error',  '-i', i, '-map_metadata', '-1', '-c:a', 'libopus', 'output.opus'])
 
-                                VALUES (
-                                   {max(reserved_names) + 1}, 
-                                   '{artist}',
-                                   '{title}', 
-                                   '{album}', 
-                                   '{date}', 
-                                   '{label}', 
-                                   '{path}', 
-                                   '{genre}')
-                           """)
-            else: 
-                print(Fore.LIGHTGREEN_EX + str(artist + ' ' +  title), 'in database!!!')
-            subprocess.run(['sudo', 'rm', i])
-            subprocess.run(['rm', 'sample.mp3'])
+                        os.rename('output.opus', MS_FOLDER + str(max(reserved_names) + 1) + '.opus')
+                        path = MS_FOLDER + str(max(reserved_names) + 1) + '.opus'
+                        print(i)
+                        artist = input('artist > ')
+                        title = input('title > ')
+                        genre = input('genre > ')
+                        cur.execute(f"""INSERT INTO items (
+                            id, 
+                            artist, 
+                            title, 
+                            album, 
+                            date, 
+                            label, 
+                            path,
+                            genre)                     
+
+                        VALUES (
+                           {max(reserved_names) + 1}, 
+                           '{artist}',
+                           '{title}', 
+                           'unkown', 
+                           'unkown', 
+                           'unkown', 
+                           '{path}', 
+                           '{genre}')
+                   """)
+                        subprocess.run(['sudo', 'rm', i])
+                        subprocess.run(['rm', 'sample.mp3'])
+                        continue
+
+                except requests.exceptions.JSONDecodeError as e:
+                    print(Fore.LIGHTRED_EX + str(e))
+                    con.commit()
+                    cur.close()
+                    con.close()
+                    exit()
+
+                time.sleep(5)
+                reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
+                try:
+                    genre = fine_data['track']['genres']['primary']
+                    genre = sub(genre)
+                except KeyError: genre ='unkown'
+                try: album = fine_data['track']['sections'][0]['metadata'][0]['text'].replace("'", '_')
+                except IndexError: album = 'unkown'
+                try: label = fine_data['track']['sections'][0]['metadata'][1]['text'].replace("'", '_')
+                
+                except IndexError: label = 'unkown'
+                try: date = fine_data['track']['sections'][0]['metadata'][2]['text'].replace("'", '_')
+                except IndexError: date = 'unkown'
+
+                title = fine_data['track']['title']
+                title = sub(title)
+                artist = fine_data['track']['subtitle']
+                artist = sub(artist)
+                
+                music_data = [i[0] for i in cur.execute("select concat(artist, ' ', title) from items where artist !='unkown' and title !='unkown'")]
+
+                if str(artist + ' ' +  title) not in music_data:
+                    if i.endswith('.opus'):
+                        subprocess.run(['ffmpeg', '-loglevel', 'error',  '-i', i, '-map_metadata', '-1', '-c:a', 'copy', 'output.opus'])
+                    else:
+                        subprocess.run(['ffmpeg', '-loglevel', 'error',  '-i', i, '-map_metadata', '-1', '-c:a', 'libopus', 'output.opus'])
+                    
+                    os.rename('output.opus', MS_FOLDER + str(max(reserved_names) + 1) + '.opus')
+                    path = MS_FOLDER + str(max(reserved_names) + 1) + '.opus'
+                    
+                    cur.execute(f"""INSERT INTO items (
+                                        id, 
+                                        artist, 
+                                        title, 
+                                        album, 
+                                        date, 
+                                        label, 
+                                        path,
+                                        genre)                     
+
+                                    VALUES (
+                                       {max(reserved_names) + 1}, 
+                                       '{artist}',
+                                       '{title}', 
+                                       '{album}', 
+                                       '{date}', 
+                                       '{label}', 
+                                       '{path}', 
+                                       '{genre}')
+                               """)
+                else: 
+                    print(Fore.LIGHTGREEN_EX + str(artist + ' ' +  title), 'in database!!!')
+                subprocess.run(['sudo', 'rm', i])
+                subprocess.run(['rm', 'sample.mp3'])
          
 elif entry == 2: 
     print("No need!!!")
@@ -284,6 +292,7 @@ elif entry == 8:
         playlist = [str(j[0]) for j in cur.execute(f"SELECT CONCAT(id,'.opus') FROM items WHERE genre='{i}' ORDER BY RANDOM()")]
         with open(i+'.m3u8', 'w') as file:
             file.write('\n'.join(playlist))
+
 elif entry == 9:
     df = pd.read_excel(OTHER_BASE, sheet_name='')
     for id, track in enumerate(df['title']):

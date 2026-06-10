@@ -48,7 +48,7 @@ elif entry == 1:
                 cur.close()
                 con.close()
                 exit()
-            if 1200 > duration > 0:
+            if 10800> duration > 0:
                 counter += 1
                 sample = track.subclipped(1, duration//3).write_audiofile("sample.mp3", logger=None)
                 

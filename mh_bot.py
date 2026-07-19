@@ -174,10 +174,12 @@ elif entry == 3:
         selector = 'title'
     elif sys.argv[2] == 'g':
         selector = 'genre'
+    elif sys.argv[2] == 'at':
+        selector = "concat(artist, ' - ', title)"
     elif sys.argv[2] == 'y':
         selector = 'date'
-
-    data = [i[0] for i in cur.execute(f'SELECT distinct {selector} from items order by 1 DESC')]    
+    
+    data = [i[0] for i in cur.execute(f"""SELECT distinct {selector} from items order by 1 DESC""")]    
     while True: 
         print(*data,  sep='\n')
 
@@ -191,7 +193,7 @@ elif entry == 3:
                 entry[id] = f'{i}'
             entry = tuple(entry)
 
-        playlist = [i[0] for i in cur.execute(f"SELECT path from items where {selector} in {entry} order by random()")]
+        playlist = [i[0] for i in cur.execute(f"""SELECT path from items where {selector} in {entry} order by random()""")]
         subprocess.run(['mpv'] + playlist)
 
 elif entry == 4:

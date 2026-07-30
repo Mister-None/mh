@@ -22,12 +22,23 @@ def sub(raw):
     return raw.lower().strip() 
 
 if len(sys.argv) < 2:
-    lst_functions = ['', 'add to base', 'clean metadata', 'play by arist/title/genre/year', 'normalize', 'remove duplicactes', 'update base', 'remove from base', 'create playlists', 'add specific base']
+    lst_functions = ['', 'add to base', 'clean metadata', 'play by arist/title/genre/year', 'normalize', 'remove duplicactes', 'update base', 'remove from base', 'create playlists', 'add specific base', 'find missed id']
     print(Fore.RED + 'Enter number of function!')
     [print(Fore.LIGHTYELLOW_EX + str(id), Fore.LIGHTGREEN_EX + '==>', Fore.LIGHTBLUE_EX +i) for id, i in enumerate(lst_functions) if i]
     sys.exit(1)
 
 entry = int(sys.argv[1])
+
+if entry == 10:
+    ids = [int(i.replace('.opus', '')) for i in os.listdir('Music')]
+    ids.sort()
+    idial_ids = [j for j in range(1,  max(ids)+1)]
+    missed_ids = []
+    for i in range(len(idial_ids)):
+        if ids[i] != idial_ids[i]:
+            ids[i:i] = [idial_ids[i]]
+            print(idial_ids[i])
+            missed_ids.append(idial_ids[i])
 
 if entry == 0:
     for i in os.listdir(MS_FOLDER):
@@ -89,7 +100,7 @@ elif entry == 1:
                            '{path}', 
                            '{genre}')
                    """)
-                        subprocess.run(['sudo', 'rm', i])
+                        subprocess.run(['rm', i])
                         subprocess.run(['rm', 'sample.mp3'])
                         continue
 
@@ -100,7 +111,7 @@ elif entry == 1:
                     con.close()
                     exit()
 
-                time.sleep(5)
+                time.sleep(3)
                 reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
                 try:
                     genre = fine_data['track']['genres']['primary']
@@ -150,11 +161,12 @@ elif entry == 1:
                                        '{path}', 
                                        '{genre}')
                                """)
+
                 else: 
                     print(Fore.LIGHTGREEN_EX + str(artist + ' ' +  title), 'in database!!!')
                 subprocess.run(['sudo', 'rm', i])
                 subprocess.run(['rm', 'sample.mp3'])
-         
+
 elif entry == 2: 
     print("No need!!!")
     exit()

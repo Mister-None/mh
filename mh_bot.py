@@ -1,4 +1,4 @@
-import requests, json, os, sqlite3, re, subprocess, sys, glob, time, pandas as pd
+import requests, json, os, sqlite3, re, subprocess, sys, glob, time, pandas as pd,numpy as np, librosa
 from moviepy import AudioFileClip
 from dotenv import load_dotenv
 from colorama import Fore, init
@@ -102,6 +102,10 @@ elif entry == 1:
                    """)
                         subprocess.run(['rm', i])
                         subprocess.run(['rm', 'sample.mp3'])
+                        y, sr = librosa.load(path, sr=None)
+                        tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+                        detected_bpm = float(np.atleast_1d(tempo)[0])
+                        cur.execute("UPDATE items SET bpm=? WHERE id=?", [round(detected_bpm), max(reserved_names) + 1])
                         continue
 
                 except requests.exceptions.JSONDecodeError as e:
@@ -111,7 +115,6 @@ elif entry == 1:
                     con.close()
                     exit()
 
-                time.sleep(3)
                 reserved_names = [int(re.search(r'\d+',  n).group(0)) for n in os.listdir(MS_FOLDER) if re.search(r'\d+',  n)]
                 try:
                     genre = fine_data['track']['genres']['primary']
@@ -164,8 +167,12 @@ elif entry == 1:
 
                 else: 
                     print(Fore.LIGHTGREEN_EX + str(artist + ' ' +  title), 'in database!!!')
-                subprocess.run(['sudo', 'rm', i])
+                subprocess.run(['rm', i])
                 subprocess.run(['rm', 'sample.mp3'])
+                y, sr = librosa.load(path, sr=None)
+                tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+                detected_bpm = float(np.atleast_1d(tempo)[0])
+                cur.execute("UPDATE items SET bpm=? WHERE id=?", [round(detected_bpm), max(reserved_names) + 1])
 
 elif entry == 2: 
     print("No need!!!")
@@ -205,7 +212,7 @@ elif entry == 3:
                 entry[id] = f'{i}'
             entry = tuple(entry)
 
-        playlist = [i[0] for i in cur.execute(f"""SELECT path from items where {selector} in {entry} order by random()""")]
+        playlist = [i[0] for i in cur.execute(f"""SELECT path from items where {selector} in {entry} order by bpm, random()""")]
         subprocess.run(['mpv'] + playlist)
 
 elif entry == 4:
